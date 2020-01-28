@@ -1,8 +1,10 @@
-import googleapiclient.discovery
-import googleapiclient
-from google.oauth2 import service_account
 import json
-SERVICE_ACCOUNT_FILE = 'service-account-test-domain.json'
+
+import googleapiclient
+import googleapiclient.discovery
+from google.oauth2 import service_account
+
+SERVICE_ACCOUNT_FILE = 'service-account-real-domain.json'
 SAMPLE = {
             'id': '0AO3KVCL7ImPEUk9PVA',
             'name': 'Test 1',
@@ -12,17 +14,20 @@ SAMPLE = {
             }
 
 
-def api_caller(scope=['https://www.googleapis.com/auth/drive.readonly']):
-    credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scope)
-    delegated_credentials = credentials.with_subject('sedthakit.pra@test.truedigital.com')
+def api_caller(scope=None, pageToken=None):
+    if scope is None:
+        scope = ['https://www.googleapis.com/auth/drive.readonly']
 
+    credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=scope)
+    delegated_credentials = credentials.with_subject('admin@truedigital.com')
     result = googleapiclient.discovery.build('drive', 'v3', credentials=delegated_credentials)
 
     return result
 
 
-def get_user(drivewithpermission=None):
+def get_user(drivewithpermission=None, pageToken=None):
     share_permission = {}
+    nextPageToken = None
 
     if drivewithpermission is None:
         drivewithpermission = SAMPLE
@@ -30,13 +35,12 @@ def get_user(drivewithpermission=None):
     share_permission.update({'share_name': drivewithpermission['name'],'permissions': []})
     
     credentials = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=['https://www.googleapis.com/auth/drive.readonly'])
-    delegated_credentials = credentials.with_subject('sedthakit.pra@test.truedigital.com')
+    delegated_credentials = credentials.with_subject('admin@truedigital.com')
 
     permissionlist = googleapiclient.discovery.build('drive', 'v2', credentials=delegated_credentials)
 
     for each_user in drivewithpermission['permissions']:
         result = permissionlist.permissions().get(fileId=drivewithpermission['id'], permissionId=each_user['id'], supportsAllDrives=True, useDomainAdminAccess=True).execute()
-        print(drivewithpermission['name'])
         # cleanup unwanted element
         del result['kind']
         del result['etag']
@@ -44,17 +48,26 @@ def get_user(drivewithpermission=None):
         del result['emailAddress']
         del result['domain']
         del result['id']
-        print(json.dumps(result, indent=4))
         share_permission['permissions'].append(result)
 
     return share_permission
 
-def debug():
-    # result = api_caller()
-    # print(result.drives().list(useDomainAdminAccess=True).execute())
 
-    result = get_user()
-    print(result)
+def debug():
+    nextPageToken = None
+    while True:
+        response = api_caller()
+        result = response.drives().list(pageToken=nextPageToken, useDomainAdminAccess=True).execute()
+        print(f"nextPageToken is {result['nextPageToken']}")
+        print(json.dumps(result['drives'], indent=4))
+
+        if 'nextPageToken' not in result:
+            break
+
+        nextPageToken = result['nextPageToken']
+
+    # result = get_user()
+    # print(result)
 
 
 if __name__ == '__main__':
